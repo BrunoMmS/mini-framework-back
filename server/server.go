@@ -1,12 +1,11 @@
 package server
 
 import (
-		"net"
-		"fmt"
-		"glac/router"
-    	"strings"
-    	"bufio"
-
+	"bufio"
+	"fmt"
+	"glac/router"
+	"net"
+	"strings"
 )
 
 

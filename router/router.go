@@ -1,8 +1,8 @@
 package router
 
 import (
-		httperr "glac/errors"
-	)
+	httperr "glac/errors"
+)
 
 
 type HandlerFunc func() (any, error)
