@@ -1,56 +1,74 @@
 package router
 
 import (
-	httperr "glac/errors"
+	httperr "glac/custom_errors"
 	"strings"
 )
 
-
-type HandlerFunc func(c *Context)
-
-type Node struct {
-    Method string
-	Handler HandlerFunc
-}
-
 type Router struct {
-	routes map[string]*Node
-    middlewares []MiddlewareFunc
+    static  map[string]map[string]*Route
+    dynamic map[string][]*Route //migrate to trie
 }
 
 
-func (r *Router) Handle(method string, path string, fn HandlerFunc){
-	newNode := &Node{
-		Handler: fn,
-		Method: method,
-	}
-	
-	r.routes[path] = newNode
+func (r *Router) handle(method, path string, fn HandlerFunc, mws ...Middleware) {
+    rt := &Route{
+        Handler:     fn,
+        Middlewares: mws,
+        Path:        path,
+    }
+
+    if strings.Contains(path, ":") {
+        r.dynamic[method] = append(r.dynamic[method], rt)
+    } else {
+        if r.static[method] == nil {
+            r.static[method] = make(map[string]*Route)
+        }
+        r.static[method][path] = rt
+    }
+}
+
+func (r *Router) Get(path string, fn HandlerFunc, middlewares ...Middleware) {
+    r.handle(GET, path, fn, middlewares...) 
+}
+
+func (r *Router) Post(path string, fn HandlerFunc, middlewares ...Middleware) {
+    r.handle(POST, path, fn, middlewares...)
+}
+
+func (r *Router) Put(path string, fn HandlerFunc, middlewares ...Middleware) {
+    r.handle(PUT, path, fn, middlewares...) 
+}
+
+func (r *Router) Delete(path string, fn HandlerFunc, middlewares ...Middleware) {
+    r.handle(DELETE, path, fn, middlewares...)
 }
 
 func (r *Router) Resolve(method, path string) (HandlerFunc, map[string]string, error) {
-    for pattern, node := range r.routes {
-        if node.Method != method {
-            continue
-        }
-
-        params, ok := matchPattern(pattern, path)
-        if ok {
-            finalHandler := node.Handler
-
-            for i := len(r.middlewares) - 1; i >= 0; i-- {
-                finalHandler = r.middlewares[i].Handle(finalHandler)
-            }
-
-            return finalHandler, params, nil
+	//static routes
+    if routesByPath, ok := r.static[method]; ok {
+        if rt := routesByPath[path]; rt != nil {
+            final := Chain(rt.Middlewares, rt.Handler)
+            return final, nil, nil
         }
     }
 
-    return nil, nil, &httperr.HttpError{Status: 404, Message: "Not Found"}
-}
+	//dynamic routes like /users/:id
+    if dynRoutes, ok := r.dynamic[method]; ok {
+        for _, rt := range dynRoutes {
+            params, ok := matchPattern(rt.Path, path)
+            if ok {
+                final := Chain(rt.Middlewares, rt.Handler)
+                return final, params, nil
+            }
+        }
+    }
 
-func (r *Router) Use(mw MiddlewareFunc) {
-    r.middlewares = append(r.middlewares, mw)
+    // not found
+    return nil, nil, &httperr.HttpError{
+        Status:  404,
+        Message: "Not Found",
+    }
 }
 
 func matchPattern(pattern, path string) (map[string]string, bool) {
@@ -92,5 +110,8 @@ func splitPath(p string) []string {
 }
 
 func InitRouter() *Router {
-	return &Router{routes: make(map[string]*Node)}
+    return &Router{
+        static:  make(map[string]map[string]*Route),
+        dynamic: make(map[string][]*Route),
+    }
 }

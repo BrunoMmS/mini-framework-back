@@ -1,7 +1,15 @@
 package router
 
-type MiddlewareFunc func(HandlerFunc) HandlerFunc
+type Middleware func(HandlerFunc) HandlerFunc
 
-func (m MiddlewareFunc) Handle(next HandlerFunc) HandlerFunc {
-	return m(next)
+func Chain(mws []Middleware, final HandlerFunc) HandlerFunc {
+    if len(mws) == 0 {
+        return final
+    }
+
+    wrapped := final
+    for i := len(mws) - 1; i >= 0; i-- {
+        wrapped = mws[i](wrapped)
+    }
+    return wrapped
 }

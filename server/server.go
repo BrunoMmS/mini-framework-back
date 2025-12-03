@@ -1,10 +1,11 @@
 package server
 
 import (
-	httperr "glac/errors"
+	httperr "glac/custom_errors"
 	"glac/router"
 	"net/http"
 	"io"
+	"fmt"
 )
 
 type Server struct {
@@ -25,10 +26,18 @@ func (s *Server) Listen(port string) error {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+        if rec := recover(); rec != nil {
+            s.Logger.LogError(r.Method, r.URL.Path, fmt.Errorf("%v", rec), r.RemoteAddr)
+            http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+        }
+    }()
+
 	ip := r.RemoteAddr
 	method := r.Method
 	path := r.URL.Path
 	bodyBytes, _ := io.ReadAll(r.Body)
+
 	handler, params, err := s.Router.Resolve(method, path)
 	if err != nil {
 		httpErr := err.(*httperr.HttpError)
@@ -41,10 +50,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := &router.Context{
 		Method: method,
 		Path:   path,
-		Writer: w,           
-		Params: params,
-		Body:   bodyBytes,      
-		Req:    r,           
+		Writer: w,
+		Req:    r,
+		Body:   bodyBytes,
+
+		Params: make(map[string]string),
+		Query:  make(map[string]string),
+	}
+
+	for k, v := range params {
+		ctx.Params[k] = v
 	}
 
 	handler(ctx)

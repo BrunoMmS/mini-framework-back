@@ -3,6 +3,7 @@ package router
 import (
 	"encoding/json"
 	"net/http"
+	"glac/custom_errors"
 )
 
 type Context struct {
@@ -28,18 +29,13 @@ func (c *Context) JSON(status int, data any) {
 
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		c.Error(http.StatusInternalServerError, "internal server error")
+		http.Error(c.Writer, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}
 
 	c.Writer.Write(jsonBytes)
 }
 
-func (c *Context) Error(status int, message string) {
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(status)
-
-	resp := map[string]string{"error": message}
-	bytes, _ := json.Marshal(resp)
-	c.Writer.Write(bytes)
+func (c *Context) Error(err *custom_errors.HttpError) {
+    c.JSON(err.Status, map[string]string{"error": err.Message})
 }
