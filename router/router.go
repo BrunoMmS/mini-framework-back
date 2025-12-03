@@ -15,6 +15,7 @@ type Node struct {
 
 type Router struct {
 	routes map[string]*Node
+    middlewares []MiddlewareFunc
 }
 
 
@@ -35,11 +36,21 @@ func (r *Router) Resolve(method, path string) (HandlerFunc, map[string]string, e
 
         params, ok := matchPattern(pattern, path)
         if ok {
-            return node.Handler, params, nil
+            finalHandler := node.Handler
+
+            for i := len(r.middlewares) - 1; i >= 0; i-- {
+                finalHandler = r.middlewares[i].Handle(finalHandler)
+            }
+
+            return finalHandler, params, nil
         }
     }
 
     return nil, nil, &httperr.HttpError{Status: 404, Message: "Not Found"}
+}
+
+func (r *Router) Use(mw MiddlewareFunc) {
+    r.middlewares = append(r.middlewares, mw)
 }
 
 func matchPattern(pattern, path string) (map[string]string, bool) {
